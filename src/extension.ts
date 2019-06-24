@@ -18,6 +18,7 @@ export function activate(ctx: vscode.ExtensionContext) {
   // Update when a file opens
   vscode.window.onDidChangeActiveTextEditor((editor) => {
     run(ctx, editor);
+    runLens();
   });
 
   // Update when a file saves
@@ -25,6 +26,7 @@ export function activate(ctx: vscode.ExtensionContext) {
     const openEditor = vscode.window.visibleTextEditors.filter((editor) => editor.document.uri === event.document.uri)[0];
 
     run(ctx, openEditor);
+    runLens();
   });
 
   vscode.workspace.onDidChangeTextDocument((event) => {
@@ -35,6 +37,7 @@ export function activate(ctx: vscode.ExtensionContext) {
     timeoutId = setTimeout(() => {
       const openEditor = vscode.window.visibleTextEditors.filter((editor) => editor.document.uri === event.document.uri)[0];
       run(ctx, openEditor);
+      runLens();
     }, 100);
   });
 
@@ -42,6 +45,7 @@ export function activate(ctx: vscode.ExtensionContext) {
   vscode.workspace.onDidChangeConfiguration((event) => {
     if (event.affectsConfiguration("jsannotations")) {
       run(ctx, vscode.window.activeTextEditor);
+      runLens();
     }
   });
 
@@ -50,6 +54,41 @@ export function activate(ctx: vscode.ExtensionContext) {
 
 export function deactivate() {
   console.log("DONE");
+}
+
+let lens: ReturnType<typeof vscode.languages.registerCodeLensProvider>;
+
+function runLens() {
+  const isEnabled = vscode.workspace.getConfiguration("jsannotations").get("enabled");
+
+  if (isEnabled === (lens != null)) {
+    return;
+  }
+
+  if (isEnabled) {
+    lens = vscode.languages.registerCodeLensProvider(
+      [
+        { language: "javascript" },
+        { language: "typescript" },
+        { language: "javascriptreact" },
+        { language: "typescriptreact" }
+      ], {
+      async provideCodeLenses(document, token) {
+          // const result: vscode.CodeLens[] = [];
+
+          const [decArray, errDecArray, lensArray] = await createDecorations(document, document.getText());
+
+          // decArray.forEach(item => {
+          //   result.push(new vscode.CodeLens(item.range, { title: item.renderOptions.before.contentText, command: null }));
+          // });
+
+          return lensArray;
+      }
+    });
+  } else {
+    lens.dispose();
+    lens = null;
+  }
 }
 
 async function run(ctx: vscode.ExtensionContext, editor: vscode.TextEditor | undefined): Promise<void> {
@@ -78,7 +117,7 @@ async function run(ctx: vscode.ExtensionContext, editor: vscode.TextEditor | und
   // Get all of the text in said editor
   const sourceCode = editor.document.getText();
 
-  const [decArray, errDecArray] = await createDecorations(editor, sourceCode);
+  const [decArray, errDecArray] = await createDecorations(editor.document, sourceCode);
 
   if (editor.document.languageId === "javascript") {
     diagCollection.set(editor.document.uri, diagnostics);
@@ -89,17 +128,17 @@ async function run(ctx: vscode.ExtensionContext, editor: vscode.TextEditor | und
   editor.setDecorations(errDecType, errDecArray);
 }
 
-export async function createDecorations(editor: vscode.TextEditor, sourceCode: string): Promise<vscode.DecorationOptions[][]> {
+export async function createDecorations(document: vscode.TextDocument, sourceCode: string): Promise<[vscode.DecorationOptions[], vscode.DecorationOptions[], vscode.CodeLens[]]> {
   diagnostics = [];
 
   const decArray: vscode.DecorationOptions[] = [];
   const errDecArray: vscode.DecorationOptions[] = [];
-
+  const lensArray: vscode.CodeLens[] = [];
   // get an array of all said function calls in the file
-  let fcArray = parser.getFunctionCalls(sourceCode, editor);
+  let fcArray = parser.getFunctionCalls(sourceCode, document);
 
   // grab the definitions for any of the function calls which can find a definition
-  fcArray = await parser.getDefinitions(fcArray, editor.document.uri);
+  fcArray = await parser.getDefinitions(fcArray, document.uri);
 
   // cache for documents so they aren't loaded for every single call
   const documentCache: any = {};
@@ -108,10 +147,10 @@ export async function createDecorations(editor: vscode.TextEditor, sourceCode: s
   const callsWithDefinitions = fcArray.filter((item) => item.definitionLocation !== undefined);
 
   for (const fc of callsWithDefinitions) {
-    await decorator.decorateFunctionCall(editor, documentCache, decArray, errDecArray, fc, diagnostics);
+    await decorator.decorateFunctionCall(document, documentCache, decArray, errDecArray, lensArray, fc, diagnostics);
   }
 
-  return [decArray, errDecArray];
+  return [decArray, errDecArray, lensArray];
 }
 
 export function getDiagnostics(): vscode.Diagnostic[] {

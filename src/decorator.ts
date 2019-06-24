@@ -3,7 +3,15 @@ import { Annotations } from "./annotationProvider";
 import { IFunctionCallObject } from "./functionCallObject";
 import { grabPossibleParameters } from "./paramExtractor";
 
-export async function decorateFunctionCall(currentEditor: vscode.TextEditor, documentCache: any, decArray, errDecArray: vscode.DecorationOptions[], fc: IFunctionCallObject, diagnostics: vscode.Diagnostic[]): Promise<void> {
+export async function decorateFunctionCall(
+  currentDocument: vscode.TextDocument,
+  documentCache: any,
+  decArray: vscode.DecorationOptions[],
+  errDecArray: vscode.DecorationOptions[],
+  lensArray: vscode.CodeLens[],
+  fc: IFunctionCallObject,
+  diagnostics: vscode.Diagnostic[]
+): Promise<void> {
   // Check for existence of functionCallObject and a defintion location
   if (fc === undefined || fc.definitionLocation === undefined) {
     return;
@@ -20,12 +28,12 @@ export async function decorateFunctionCall(currentEditor: vscode.TextEditor, doc
   let paramList = grabPossibleParameters(fc, definitionLine);
 
   // Remove first parameter from list if it equals `this` in a TS file
-  if (currentEditor.document.languageId === "typescript" && paramList[0] === "this") {
+  if (document.languageId === "typescript" && paramList[0] === "this") {
     paramList = paramList.slice(1);
   }
 
   if (paramList.length > 0) {
-    const functionCallLine = currentEditor.document.lineAt(fc.lineNumber).text;
+    const functionCallLine = document.lineAt(fc.lineNumber).text;
 
     if (shouldntBeDecorated(paramList, fc, functionCallLine, definitionLine)) {
       return;
@@ -40,6 +48,8 @@ export async function decorateFunctionCall(currentEditor: vscode.TextEditor, doc
     }
 
     if (fc.paramLocations && fc.paramNames) {
+      const allLeading = fc.paramLocations.every((i) => i.isLeadingToken);
+
       let counter = 0;
       for (const ix in fc.paramLocations) {
         if (fc.paramLocations.hasOwnProperty(ix)) {
@@ -51,15 +61,17 @@ export async function decorateFunctionCall(currentEditor: vscode.TextEditor, doc
             continue;
           }
 
-          let decoration: vscode.DecorationOptions;
-
           const currentArgRange = fc.paramLocations[idx];
 
           if (restParamIdx !== -1 && idx >= restParamIdx) {
-            decoration = Annotations.paramAnnotation(paramList[restParamIdx] + `[${idx - restParamIdx}]: `, currentArgRange);
+            if (!allLeading) {
+              decArray.push(Annotations.paramAnnotation(paramList[restParamIdx] + `[${idx - restParamIdx}]: `, currentArgRange));
+            } else {
+              lensArray.push(new vscode.CodeLens(currentArgRange, { title: `[${idx - restParamIdx}]`, command: null }));
+            }
           } else {
             if (idx >= paramList.length) {
-              if (currentEditor.document.languageId === "javascript" && willShowDiagnostics) {
+              if (document.languageId === "javascript" && willShowDiagnostics) {
                 const diag = new vscode.Diagnostic(currentArgRange, "[JS Param Annotations] Invalid parameter", vscode.DiagnosticSeverity.Error);
 
                 if (!diagnostics) {
@@ -82,10 +94,13 @@ export async function decorateFunctionCall(currentEditor: vscode.TextEditor, doc
 
             const showFirstSpace = vscode.workspace.getConfiguration("jsannotations").get("showFirstSpace");
             const spacer = (counter === 0 && showFirstSpace) ? " " : "";
-            decoration = Annotations.paramAnnotation(spacer + paramList[idx] + ": ", currentArgRange);
+            if (!allLeading) {
+              decArray.push(Annotations.paramAnnotation(spacer + paramList[idx] + ": ", currentArgRange));
+            } else {
+              lensArray.push(new vscode.CodeLens(currentArgRange, { title: paramList[idx], command: null }));
+            }
           }
           counter++;
-          decArray.push(decoration);
         }
       }
     }

@@ -96,7 +96,7 @@ async function getDecorationsFromExample(exampleName: string): Promise<vscode.De
   const document = await vscode.workspace.openTextDocument(uri);
   const editor = await vscode.window.showTextDocument(document);
   await sleep(500);
-  const decorations = await Extension.createDecorations(editor, editor.document.getText());
+  const decorations = await Extension.createDecorations(editor.document, editor.document.getText());
 
   return decorations;
 }

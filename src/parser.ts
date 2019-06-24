@@ -2,18 +2,18 @@ import * as recast from "recast";
 import * as vscode from "vscode";
 import { IFunctionCallObject } from "./functionCallObject";
 
-export function getFunctionCalls(sourceCode: string, editor: vscode.TextEditor): IFunctionCallObject[] {
+export function getFunctionCalls(sourceCode: string, document: vscode.TextDocument): IFunctionCallObject[] {
   let fcArray: IFunctionCallObject[] = [];
 
-  const options = { parser: null };
+  const options = { parser: null, tabWidth: 1 };
 
-  if (editor.document.languageId === "javascript") {
+  if (document.languageId === "javascript") {
     options.parser = require("recast/parsers/esprima");
-  } else if (editor.document.languageId === "typescript") {
+  } else if (document.languageId === "typescript") {
     options.parser = require("recast/parsers/typescript");
-  } else if (editor.document.languageId === "javascriptreact") {
+  } else if (document.languageId === "javascriptreact") {
     options.parser = require("recast/parsers/babel");
-  } else if (editor.document.languageId === "typescriptreact") {
+  } else if (document.languageId === "typescriptreact") {
     options.parser = {
       parse(source) {
         const babelParser = require("recast/parsers/babel").parser;
@@ -66,7 +66,7 @@ export function getFunctionCalls(sourceCode: string, editor: vscode.TextEditor):
     console.log(err.message);
   }
 
-  fcArray = lookForFunctionCalls(editor, fcArray, ast.program.body);
+  fcArray = lookForFunctionCalls(document, fcArray, ast.program.body);
 
   return fcArray;
 }
@@ -79,7 +79,7 @@ function removeShebang(sourceCode: string): string {
   return sourceCodeArr.join("\n");
 }
 
-function lookForFunctionCalls(editor: vscode.TextEditor, fcArray: IFunctionCallObject[], body: any): IFunctionCallObject[] {
+function lookForFunctionCalls(document: vscode.TextDocument, fcArray: IFunctionCallObject[], body: any): IFunctionCallObject[] {
   let arr = [];
 
   function getNodes(astNode, nodeArr) {
@@ -162,7 +162,7 @@ function lookForFunctionCalls(editor: vscode.TextEditor, fcArray: IFunctionCallO
       };
 
       if (call.arguments) {
-        const paramObj = parseParams(call.arguments, editor);
+        const paramObj = parseParams(call.arguments, document);
 
         newFunctionCallObject.paramLocations = paramObj.paramLocationsArr;
         newFunctionCallObject.paramNames = paramObj.paramNamesArr;
@@ -175,7 +175,7 @@ function lookForFunctionCalls(editor: vscode.TextEditor, fcArray: IFunctionCallO
   return fcArray;
 }
 
-function parseParams(args: any, editor: vscode.TextEditor): any {
+function parseParams(args: any, document: vscode.TextDocument): any {
   const paramLocationsArr: vscode.Range[] = [];
   const paramNamesArr: string[] = [];
 
@@ -191,19 +191,11 @@ function parseParams(args: any, editor: vscode.TextEditor): any {
         startArr[1] -= 1;
       }
 
-      const line = editor.document.lineAt(startArr[0]);
-
-      let offset;
-
-      if (editor.options.insertSpaces) {
-        offset = 0;
-      } else {
-        offset = line.firstNonWhitespaceCharacterIndex * 3;
-      }
+      const line = document.lineAt(startArr[0]);
 
       const argRange = new vscode.Range(
-        new vscode.Position(startArr[0], startArr[1] - offset),
-        new vscode.Position(endArr[0], endArr[1] - offset)
+        new vscode.Position(startArr[0], startArr[1]),
+        new vscode.Position(endArr[0], endArr[1])
       );
 
       if (arg.type === "MemberExpression") {
@@ -222,8 +214,8 @@ function parseParams(args: any, editor: vscode.TextEditor): any {
         // variables (isTrue, str)
         paramNamesArr.push(arg.name);
       }
-
-      paramLocationsArr.push(argRange);
+      const isLeadingToken = /^\s+$/.test(line.text.slice(0, startArr[1]));
+      paramLocationsArr.push(Object.assign(argRange, { isLeadingToken }));
     }
   });
 

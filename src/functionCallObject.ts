@@ -6,6 +6,6 @@ export interface IFunctionCallObject {
     lineNumber: number;
     functionRange?: Range;
     paramNames?: string[];
-    paramLocations?: Range[];
+    paramLocations?: Array<Range & { isLeadingToken: boolean }>;
     definitionLocation?: Location;
 }
