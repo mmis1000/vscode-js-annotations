@@ -67,7 +67,7 @@ export async function decorateFunctionCall(
             if (!allLeading) {
               decArray.push(Annotations.paramAnnotation(paramList[restParamIdx] + `[${idx - restParamIdx}]: `, currentArgRange));
             } else {
-              lensArray.push(new vscode.CodeLens(currentArgRange, { title: `[${idx - restParamIdx}]`, command: null }));
+              lensArray.push(new vscode.CodeLens(currentArgRange, { title: `[${idx - restParamIdx}]:`, command: null }));
             }
           } else {
             if (idx >= paramList.length) {
@@ -97,7 +97,7 @@ export async function decorateFunctionCall(
             if (!allLeading) {
               decArray.push(Annotations.paramAnnotation(spacer + paramList[idx] + ": ", currentArgRange));
             } else {
-              lensArray.push(new vscode.CodeLens(currentArgRange, { title: paramList[idx], command: null }));
+              lensArray.push(new vscode.CodeLens(currentArgRange, { title: `${paramList[idx]}:`, command: null }));
             }
           }
           counter++;
